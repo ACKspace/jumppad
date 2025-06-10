@@ -1,61 +1,93 @@
- // set pin numbers (cheesy, yes, at some point this will change in a for loop, or something similar):
- const int btnPlate[ 5 ] = { 13, 12, 8, 7, 4 };
- boolean btnState[ 5 ]  = { true, true, true, true, true };
- long btnTime[ 5 ] = { 0, 0, 0, 0, 0 };
+#include <Keyboard.h>
 
- // Arduino USB Keyboard HID
- uint8_t keybuf[8] = { 0 };
+typedef struct ButtonParameters {
+  int pin;
+  char key;
+} ButtonParameters;
 
- void setup( )
- {
-   pinMode(btnPlate[ 0 ], INPUT_PULLUP );
-   pinMode(btnPlate[ 1 ], INPUT_PULLUP );
-   pinMode(btnPlate[ 2 ], INPUT_PULLUP );
-   pinMode(btnPlate[ 3 ], INPUT_PULLUP );
-   pinMode(btnPlate[ 4 ], INPUT_PULLUP );
- 
-   //Serial.begin( 9600 );
-   Keyboard.begin();
- }
- 
- void loop( )
- {
-   handleButton( 0 );
-   handleButton( 1 );
-   handleButton( 2 );
-   handleButton( 3 );
-   handleButton( 4 );
- }
- 
- void handleButton( int _button )
- {
-   if ( digitalRead( btnPlate[ _button ] ) != btnState[ _button ] )
-   {
-     btnState[ _button ] = digitalRead( btnPlate[ _button ] );
-     if ( btnState[ _button ] && !btnTime[ _button ] )
-     {
-       // Send keypress, start at index 2, and write keyboard keys '1' and beyond
-       keybuf[ 2 + _button ] = 0x1e + _button;
-       //Serial.write( keybuf, 8 );
-       //Keyboard.press( 0x1e + _button );
-       Keyboard.print( (_button + 1) );
-       btnTime[ _button ] = millis();
-     }
-   }
-   if ( btnTime[ _button ] && ( btnTime[ _button ] + 500 < millis() ) )
-   {
-     keybuf[ 2 + _button ] = 0x00;
-     btnTime[ _button ] = 0;
-     //Serial.write( keybuf, 8 );
-     //Keyboard.release( 0x1e + _button );
-   }
- }
- /*
- void releaseKey() 
- {
-     keybuf[0] = 0;
-     keybuf[2] = 0;
-     Serial.write( keybuf, 8 );
- }
- */
- 
+class Button {
+public:
+  Button() {
+    resetTime();
+    keyboardBegin();
+  }
+
+  void setParameters(ButtonParameters parameters) {
+    _pin = parameters.pin;
+    pinMode(_pin, INPUT_PULLUP);
+    _key = parameters.key;
+  }
+
+  void handle() {
+    boolean read = digitalRead(_pin);
+    long currentTime = millis();
+    if (read != _state) {
+      _state = read;
+      if (_state && !_time) {
+        _time = currentTime;
+        payload();
+      }
+    }
+    if (_time && ((_time + _DELAY) < currentTime)) {
+      resetTime();
+    }
+  }
+private:
+  static const int _DELAY = 500;
+  static inline boolean _keyboardBegin = false;
+  int _pin;
+  char _key;
+  boolean _state = true;
+  long _time;
+
+  void resetTime() {
+    _time = 0;
+  }
+
+  void payload() {
+    Keyboard.print(_key);
+  }
+
+  keyboardBegin() {
+    if (!_keyboardBegin) {
+      _keyboardBegin = true;
+      Keyboard.begin();
+    } 
+  }
+};
+
+class ButtonList {
+public:
+  ButtonList(ButtonParameters parameterList[], int length) {
+    _length = length;
+    _buttonList = new Button[_length];
+    for (int i = 0; i < _length; i++) {
+      _buttonList[i].setParameters(parameterList[i]);
+    }
+  }
+
+  handle() {
+    for (int i = 0; i < _length; i++) {
+      _buttonList[i].handle();
+    }
+  }
+private:
+  Button* _buttonList;
+  int _length;
+};
+
+ButtonParameters parameterList[] = {
+  { .pin =  8, .key = KEY_UP_ARROW    },
+  { .pin =  7, .key = KEY_DOWN_ARROW  },
+  { .pin = 13, .key = KEY_LEFT_ARROW  },
+  { .pin = 12, .key = KEY_RIGHT_ARROW },
+};
+int length = sizeof(parameterList) / sizeof(ButtonParameters);
+ButtonList buttonList(parameterList, length);
+
+void setup() {
+}
+
+void loop() {
+  buttonList.handle();
+}
